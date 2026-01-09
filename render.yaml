@@ -6,13 +6,14 @@ services:
   - type: web
     name: rmp-pipeline-api
     runtime: python
-    buildCommand: pip install -r backend/requirements.txt
+    plan: free
+    buildCommand: cd backend && pip install -r requirements.txt
     startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: BOX_CONFIG_JSON
-        sync: false  # Set manually in Render dashboard
-      - key: DATABASE_URL
-        value: sqlite:///./rmp_pipeline.db
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: SECRET_KEY
         generateValue: true
     healthCheckPath: /api/health
@@ -21,12 +22,13 @@ services:
   - type: web
     name: rmp-pipeline-frontend
     runtime: static
+    plan: free
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://rmp-pipeline-api.onrender.com
     routes:
-      - type: rewrite
-        source: /api/*
-        destination: https://rmp-pipeline-api.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
