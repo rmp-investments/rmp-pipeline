@@ -70,12 +70,31 @@ except Exception as e:
 
 print("\n=== Import tests complete ===\n")
 
-# Create minimal app
-app = FastAPI(title="RMP Pipeline API - Test")
+# Step 8: Test lifespan with init_db
+print("Step 8: Testing lifespan/init_db...")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    """Test lifecycle manager."""
+    print("Lifespan: Starting init_db...")
+    try:
+        from app.database import init_db
+        await init_db()
+        print("Lifespan: init_db complete!")
+    except Exception as e:
+        print(f"Lifespan: init_db FAILED - {e}")
+        import traceback
+        traceback.print_exc()
+    yield
+    print("Lifespan: Shutdown")
+
+# Create app WITH lifespan
+app = FastAPI(title="RMP Pipeline API - Test", lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "Test app running - check logs for import results"}
+    return {"status": "ok", "message": "Test app with lifespan - check logs"}
 
 @app.get("/health")
 async def health():
