@@ -1,6 +1,4 @@
 # Render Blueprint for RMP Pipeline
-# https://render.com/docs/blueprint-spec
-
 services:
   # Backend API
   - type: web
@@ -19,10 +17,8 @@ services:
     healthCheckPath: /api/health
 
   # Frontend (Static Site)
-  - type: web
+  - type: static
     name: rmp-pipeline-frontend
-    runtime: static
-    plan: free
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
