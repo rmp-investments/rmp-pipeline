@@ -3,10 +3,15 @@ Pipeline status API endpoints.
 
 Provides endpoints for managing the deal pipeline - status updates, filtering,
 and pipeline overview functionality.
+
+NEW: Reads properties from Box folder structure as source of truth.
+Box Path: 3. Underwriting Pipeline/Screener/Properties/Zone*/[PropertyName]/
 """
 
 from typing import List, Optional
 from datetime import datetime
+import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -16,9 +21,14 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.property import Property, PipelineStatus, BrokerInfo
+from app.services.box_service import get_box_service
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Box folder path for properties
+BOX_PROPERTIES_PATH = "3. Underwriting Pipeline/Screener/Properties"
 
 
 # ----- Pydantic Schemas -----
@@ -95,11 +105,177 @@ class PipelineStatsResponse(BaseModel):
     by_priority: dict
 
 
+class BoxPipelineItem(BaseModel):
+    """Schema for a pipeline item read from Box folder structure."""
+
+    id: str  # Box folder ID
+    name: str  # Property name (cleaned from folder name)
+    zone: Optional[str] = None  # Zone extracted from parent folder
+    phase: Optional[str] = None  # Not stored in Box, always None
+    has_screener_output: bool = False  # Whether screener output exists
+    folder_path: Optional[str] = None  # Full path in Box
+
+
+class BoxPipelineResponse(BaseModel):
+    """Response schema for Box-based pipeline listing."""
+
+    properties: List[BoxPipelineItem]
+    box_connected: bool
+    warning: Optional[str] = None
+    total_count: int
+
+
+# ----- Helper Functions -----
+
+
+def clean_property_name(folder_name: str) -> str:
+    """
+    Convert folder name to readable property name.
+
+    Examples:
+        VarsityTownhomes -> Varsity Townhomes
+        NorthOakCrossing -> North Oak Crossing
+    """
+    # Insert space before capital letters
+    spaced = re.sub(r'(?<!^)(?=[A-Z])', ' ', folder_name)
+    # Replace underscores with spaces
+    spaced = spaced.replace('_', ' ')
+    return spaced.strip()
+
+
+def extract_zone_name(zone_folder_name: str) -> str:
+    """
+    Extract clean zone name from folder.
+
+    Examples:
+        Zone1_Mountain -> Zone1_Mountain (keep as-is for now)
+    """
+    return zone_folder_name
+
+
+async def list_properties_from_box() -> BoxPipelineResponse:
+    """
+    Read properties from Box folder structure.
+
+    Navigates: Properties/ -> Zone*/ -> [PropertyName]/
+    """
+    box_service = get_box_service()
+
+    if not box_service.is_connected():
+        logger.warning("Box not connected - returning empty list")
+        return BoxPipelineResponse(
+            properties=[],
+            box_connected=False,
+            warning="Box not connected. Check BOX_CONFIG_JSON environment variable.",
+            total_count=0
+        )
+
+    try:
+        # Find the Properties folder
+        properties_folder_id = box_service.find_folder(BOX_PROPERTIES_PATH)
+
+        if not properties_folder_id:
+            logger.warning(f"Properties folder not found at: {BOX_PROPERTIES_PATH}")
+            return BoxPipelineResponse(
+                properties=[],
+                box_connected=True,
+                warning=f"Properties folder not found at: {BOX_PROPERTIES_PATH}",
+                total_count=0
+            )
+
+        logger.info(f"Found Properties folder: {properties_folder_id}")
+
+        # List zone folders
+        zone_folders = box_service.list_folder(properties_folder_id)
+        logger.info(f"Found {len(zone_folders)} zone folders")
+
+        properties = []
+
+        for zone_folder in zone_folders:
+            if zone_folder['type'] != 'folder':
+                continue
+
+            zone_name = zone_folder['name']
+            zone_id = zone_folder['id']
+
+            # List property folders within this zone
+            property_folders = box_service.list_folder(zone_id)
+
+            for prop_folder in property_folders:
+                if prop_folder['type'] != 'folder':
+                    continue
+
+                prop_name = clean_property_name(prop_folder['name'])
+                prop_id = prop_folder['id']
+
+                # Check if screener output exists (look for Screener Output folder or file)
+                prop_contents = box_service.list_folder(prop_id)
+                has_screener = any(
+                    item['name'].lower().startswith('screener') or
+                    'output' in item['name'].lower()
+                    for item in prop_contents
+                )
+
+                properties.append(BoxPipelineItem(
+                    id=prop_id,
+                    name=prop_name,
+                    zone=zone_name,
+                    phase=None,  # Phase not tracked in Box
+                    has_screener_output=has_screener,
+                    folder_path=f"{BOX_PROPERTIES_PATH}/{zone_name}/{prop_folder['name']}"
+                ))
+
+        logger.info(f"Found {len(properties)} properties in Box")
+
+        return BoxPipelineResponse(
+            properties=properties,
+            box_connected=True,
+            warning=None,
+            total_count=len(properties)
+        )
+
+    except Exception as e:
+        logger.error(f"Error reading properties from Box: {e}")
+        return BoxPipelineResponse(
+            properties=[],
+            box_connected=True,
+            warning=f"Error reading from Box: {str(e)}",
+            total_count=0
+        )
+
+
 # ----- API Endpoints -----
 
 
-@router.get("/", response_model=List[PipelineItemResponse])
+@router.get("/", response_model=BoxPipelineResponse)
 async def get_pipeline(
+    zone: Optional[str] = None,
+):
+    """
+    Get pipeline view with all properties from Box folder structure.
+
+    This is the main pipeline dashboard data endpoint.
+    Properties are read directly from Box as the source of truth.
+
+    Box Path: 3. Underwriting Pipeline/Screener/Properties/Zone*/[PropertyName]/
+
+    - **zone**: Filter by geographic zone (optional)
+
+    Returns:
+        BoxPipelineResponse with list of properties and connection status
+    """
+    result = await list_properties_from_box()
+
+    # Apply zone filter if provided
+    if zone and result.properties:
+        result.properties = [p for p in result.properties if p.zone == zone]
+        result.total_count = len(result.properties)
+
+    return result
+
+
+@router.get("/db", response_model=List[PipelineItemResponse])
+async def get_pipeline_from_db(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     phase: Optional[str] = None,
@@ -108,9 +284,10 @@ async def get_pipeline(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get pipeline view with all properties and their status.
+    LEGACY: Get pipeline view from database.
 
-    This is the main pipeline dashboard data endpoint.
+    This endpoint is kept for backwards compatibility.
+    Use GET /api/pipeline/ for Box-based data (source of truth).
 
     - **skip**: Number of records to skip (pagination)
     - **limit**: Maximum number of records to return

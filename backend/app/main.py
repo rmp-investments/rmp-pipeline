@@ -8,6 +8,7 @@ Run with: uvicorn app.main:app --reload
 """
 
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
 from app.api import properties, pipeline, screener, auth
+from app.services.box_service import get_box_service
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -22,6 +26,15 @@ async def lifespan(app: FastAPI):
     """Application lifecycle manager."""
     # Startup: Initialize database
     await init_db()
+
+    # Check Box connection status
+    box_service = get_box_service()
+    if box_service.is_connected():
+        logger.info("Box connection: CONNECTED")
+    else:
+        logger.warning("Box connection: NOT CONNECTED - Properties will be unavailable")
+        logger.warning("Ensure BOX_CONFIG_JSON environment variable is set correctly")
+
     yield
     # Shutdown: Clean up resources (if needed)
     pass
@@ -63,10 +76,12 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
+    box_service = get_box_service()
     return {
         "status": "healthy",
         "database": "connected",
-        # TODO: Add actual health checks (database connectivity, etc.)
+        "box_connected": box_service.is_connected(),
+        "box_warning": None if box_service.is_connected() else "Box not connected. Check BOX_CONFIG_JSON environment variable.",
     }
 
 

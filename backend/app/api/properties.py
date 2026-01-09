@@ -2,10 +2,14 @@
 Property CRUD API endpoints.
 
 Provides basic Create, Read, Update, Delete operations for properties.
+
+NEW: Also provides Box-based property reading as source of truth.
 """
 
 from typing import List, Optional
 from datetime import datetime
+import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -15,9 +19,14 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.property import Property, PipelineStatus, BrokerInfo
+from app.services.box_service import get_box_service
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Box folder path for properties
+BOX_PROPERTIES_PATH = "3. Underwriting Pipeline/Screener/Properties"
 
 
 # ----- Pydantic Schemas -----
@@ -109,11 +118,175 @@ class PropertyResponse(BaseModel):
     broker_info: Optional[BrokerInfoSchema] = None
 
 
+class BoxPropertyDetail(BaseModel):
+    """Schema for property detail from Box folder."""
+
+    id: str  # Box folder ID
+    name: str  # Property name
+    zone: Optional[str] = None
+    folder_path: str
+    contents: List[dict] = []  # List of files/folders in property folder
+    has_screener_output: bool = False
+    has_costar_reports: bool = False
+    has_maps: bool = False
+    has_logs: bool = False
+
+
+class BoxPropertyListResponse(BaseModel):
+    """Response for Box-based property listing."""
+
+    properties: List[BoxPropertyDetail]
+    box_connected: bool
+    warning: Optional[str] = None
+    total_count: int
+
+
+# ----- Helper Functions -----
+
+
+def clean_property_name(folder_name: str) -> str:
+    """Convert folder name to readable property name."""
+    spaced = re.sub(r'(?<!^)(?=[A-Z])', ' ', folder_name)
+    spaced = spaced.replace('_', ' ')
+    return spaced.strip()
+
+
+async def get_property_from_box(folder_id: str) -> Optional[BoxPropertyDetail]:
+    """
+    Get property details from Box by folder ID.
+    """
+    box_service = get_box_service()
+
+    if not box_service.is_connected():
+        return None
+
+    try:
+        contents = box_service.list_folder(folder_id)
+
+        # Analyze folder contents
+        has_screener = any('screener' in item['name'].lower() or 'output' in item['name'].lower() for item in contents)
+        has_costar = any('costar' in item['name'].lower() for item in contents)
+        has_maps = any('map' in item['name'].lower() for item in contents)
+        has_logs = any('log' in item['name'].lower() for item in contents)
+
+        return BoxPropertyDetail(
+            id=folder_id,
+            name="",  # Will be set by caller
+            zone=None,  # Will be set by caller
+            folder_path="",  # Will be set by caller
+            contents=contents,
+            has_screener_output=has_screener,
+            has_costar_reports=has_costar,
+            has_maps=has_maps,
+            has_logs=has_logs
+        )
+    except Exception as e:
+        logger.error(f"Error getting property from Box: {e}")
+        return None
+
+
+async def list_properties_from_box(zone_filter: Optional[str] = None, search: Optional[str] = None) -> BoxPropertyListResponse:
+    """
+    List all properties from Box folder structure.
+    """
+    box_service = get_box_service()
+
+    if not box_service.is_connected():
+        return BoxPropertyListResponse(
+            properties=[],
+            box_connected=False,
+            warning="Box not connected. Check BOX_CONFIG_JSON environment variable.",
+            total_count=0
+        )
+
+    try:
+        properties_folder_id = box_service.find_folder(BOX_PROPERTIES_PATH)
+
+        if not properties_folder_id:
+            return BoxPropertyListResponse(
+                properties=[],
+                box_connected=True,
+                warning=f"Properties folder not found at: {BOX_PROPERTIES_PATH}",
+                total_count=0
+            )
+
+        zone_folders = box_service.list_folder(properties_folder_id)
+        properties = []
+
+        for zone_folder in zone_folders:
+            if zone_folder['type'] != 'folder':
+                continue
+
+            zone_name = zone_folder['name']
+
+            # Apply zone filter if provided
+            if zone_filter and zone_name != zone_filter:
+                continue
+
+            property_folders = box_service.list_folder(zone_folder['id'])
+
+            for prop_folder in property_folders:
+                if prop_folder['type'] != 'folder':
+                    continue
+
+                prop_name = clean_property_name(prop_folder['name'])
+
+                # Apply search filter if provided
+                if search and search.lower() not in prop_name.lower():
+                    continue
+
+                prop_contents = box_service.list_folder(prop_folder['id'])
+
+                properties.append(BoxPropertyDetail(
+                    id=prop_folder['id'],
+                    name=prop_name,
+                    zone=zone_name,
+                    folder_path=f"{BOX_PROPERTIES_PATH}/{zone_name}/{prop_folder['name']}",
+                    contents=prop_contents,
+                    has_screener_output=any('screener' in item['name'].lower() or 'output' in item['name'].lower() for item in prop_contents),
+                    has_costar_reports=any('costar' in item['name'].lower() for item in prop_contents),
+                    has_maps=any('map' in item['name'].lower() for item in prop_contents),
+                    has_logs=any('log' in item['name'].lower() for item in prop_contents)
+                ))
+
+        return BoxPropertyListResponse(
+            properties=properties,
+            box_connected=True,
+            warning=None,
+            total_count=len(properties)
+        )
+
+    except Exception as e:
+        logger.error(f"Error listing properties from Box: {e}")
+        return BoxPropertyListResponse(
+            properties=[],
+            box_connected=True,
+            warning=f"Error reading from Box: {str(e)}",
+            total_count=0
+        )
+
+
 # ----- API Endpoints -----
 
 
-@router.get("/", response_model=List[PropertyResponse])
+@router.get("/", response_model=BoxPropertyListResponse)
 async def list_properties(
+    zone: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    """
+    List all properties from Box folder structure (source of truth).
+
+    Box Path: 3. Underwriting Pipeline/Screener/Properties/Zone*/[PropertyName]/
+
+    - **zone**: Filter by zone folder name
+    - **search**: Search by property name
+    """
+    return await list_properties_from_box(zone_filter=zone, search=search)
+
+
+@router.get("/db", response_model=List[PropertyResponse])
+async def list_properties_from_database(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     zone: Optional[str] = None,
@@ -122,7 +295,9 @@ async def list_properties(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    List all properties with optional filtering.
+    LEGACY: List all properties from database.
+
+    Use GET /api/properties/ for Box-based data (source of truth).
 
     - **skip**: Number of records to skip (pagination)
     - **limit**: Maximum number of records to return
