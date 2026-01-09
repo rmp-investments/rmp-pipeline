@@ -16,9 +16,9 @@ services:
         generateValue: true
     healthCheckPath: /api/health
 
-  # Frontend (Static Site)
-  - type: static
-    name: rmp-pipeline-frontend
+staticSites:
+  # Frontend
+  - name: rmp-pipeline-frontend
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
