@@ -12,9 +12,3 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
-
-staticSites:
-  - name: rmp-pipeline-frontend
-    buildCommand: cd frontend && npm install && npm run build
-    publishDir: ./frontend/dist
-    pullRequestPreviewsEnabled: false
