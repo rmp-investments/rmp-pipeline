@@ -3,99 +3,71 @@
 import sys
 print(f"Python version: {sys.version}")
 
-# Step 1: Basic FastAPI
-print("Step 1: Importing FastAPI...")
-from fastapi import FastAPI
-print("Step 1: OK")
-
-# Step 2: Settings
-print("Step 2: Importing config/settings...")
-try:
-    from app.config import settings
-    print(f"Step 2: OK - database_url={settings.database_url}")
-except Exception as e:
-    print(f"Step 2: FAILED - {e}")
-    import traceback
-    traceback.print_exc()
-
-# Step 3: Database
-print("Step 3: Importing database...")
-try:
-    from app.database import Base, engine
-    print("Step 3: OK")
-except Exception as e:
-    print(f"Step 3: FAILED - {e}")
-    import traceback
-    traceback.print_exc()
-
-# Step 4: Models
-print("Step 4: Importing models...")
-try:
-    from app.models import property
-    print("Step 4: OK")
-except Exception as e:
-    print(f"Step 4: FAILED - {e}")
-    import traceback
-    traceback.print_exc()
-
-# Step 5: Box service (this might be the culprit)
-print("Step 5: Importing box_service...")
-try:
-    from app.services.box_service import get_box_service
-    print("Step 5: OK")
-except Exception as e:
-    print(f"Step 5: FAILED - {e}")
-    import traceback
-    traceback.print_exc()
-
-# Step 6: Screener service
-print("Step 6: Importing screener_service...")
-try:
-    from app.services.screener_service import ScreenerService
-    print("Step 6: OK")
-except Exception as e:
-    print(f"Step 6: FAILED - {e}")
-    import traceback
-    traceback.print_exc()
-
-# Step 7: API routers
-print("Step 7: Importing API routers...")
-try:
-    from app.api import properties, pipeline, screener, auth
-    print("Step 7: OK")
-except Exception as e:
-    print(f"Step 7: FAILED - {e}")
-    import traceback
-    traceback.print_exc()
-
-print("\n=== Import tests complete ===\n")
-
-# Step 8: Test lifespan with init_db
-print("Step 8: Testing lifespan/init_db...")
 from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+# Import all modules like main.py does
+print("Importing app.config...")
+from app.config import settings
+print(f"OK - cors_origins={settings.cors_origins}")
+
+print("Importing app.database...")
+from app.database import init_db
+print("OK")
+
+print("Importing app.api routers...")
+from app.api import properties, pipeline, screener, auth
+print("OK")
+
+print("\n=== All imports successful ===\n")
 
 @asynccontextmanager
-async def lifespan(app):
-    """Test lifecycle manager."""
-    print("Lifespan: Starting init_db...")
+async def lifespan(app: FastAPI):
+    """Application lifecycle manager - same as main.py."""
+    print("Lifespan: Calling init_db()...")
     try:
-        from app.database import init_db
         await init_db()
-        print("Lifespan: init_db complete!")
+        print("Lifespan: init_db() completed successfully!")
     except Exception as e:
-        print(f"Lifespan: init_db FAILED - {e}")
+        print(f"Lifespan: init_db() FAILED - {e}")
         import traceback
         traceback.print_exc()
+        # Re-raise to see if this is what kills the app
+        raise
     yield
     print("Lifespan: Shutdown")
 
-# Create app WITH lifespan
-app = FastAPI(title="RMP Pipeline API - Test", lifespan=lifespan)
+# Create app exactly like main.py
+app = FastAPI(
+    title="RMP Pipeline Web App - Test",
+    description="Testing full app configuration",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# Add CORS middleware exactly like main.py
+print(f"Adding CORS middleware with origins: {settings.cors_origins}")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers exactly like main.py
+print("Including routers...")
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(properties.router, prefix="/api/properties", tags=["Properties"])
+app.include_router(pipeline.router, prefix="/api/pipeline", tags=["Pipeline"])
+app.include_router(screener.router, prefix="/api/screener", tags=["Screener"])
+print("Routers included successfully!")
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "Test app with lifespan - check logs"}
+    return {"status": "ok", "message": "Full test app running - check logs for details"}
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy", "database": "connected"}
