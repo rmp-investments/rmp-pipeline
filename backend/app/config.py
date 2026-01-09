@@ -20,8 +20,8 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # Database
-    database_url: str = "sqlite+aiosqlite:///./pipeline.db"
+    # Database - use in-memory SQLite for cloud, file-based for local
+    database_url: str = "sqlite+aiosqlite:///:memory:"
 
     # API Keys
     anthropic_api_key: str = ""
