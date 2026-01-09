@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import './App.css'
+import { apiUrl } from './config'
 
 interface Property {
   id: number
@@ -43,7 +44,7 @@ function App() {
 
   const fetchPipeline = async () => {
     try {
-      const response = await fetch('/api/pipeline')
+      const response = await fetch(apiUrl('/api/pipeline'))
       if (!response.ok) throw new Error('Failed to fetch pipeline')
       const data = await response.json()
       setProperties(data)
@@ -83,7 +84,7 @@ function App() {
 
     try {
       // Start the screener (runs in background)
-      const response = await fetch(`/api/screener/${propertyId}/run`, {
+      const response = await fetch(apiUrl(`/api/screener/${propertyId}/run`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
@@ -102,7 +103,7 @@ function App() {
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2 seconds
 
-        const statusResponse = await fetch(`/api/screener/${propertyId}/status`)
+        const statusResponse = await fetch(apiUrl(`/api/screener/${propertyId}/status`))
         if (!statusResponse.ok) break
 
         const status = await statusResponse.json()
@@ -306,7 +307,7 @@ function AddPropertyModal({ onClose, onSuccess }: { onClose: () => void, onSucce
     setSaving(true)
 
     try {
-      const response = await fetch('/api/properties', {
+      const response = await fetch(apiUrl('/api/properties'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

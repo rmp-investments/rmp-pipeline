@@ -14,3 +14,11 @@ services:
         generateValue: true
       - key: PYTHONPATH
         value: /opt/render/project/src/backend
+
+  - type: static_site
+    name: rmp-pipeline-frontend
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://rmp-pipeline-api.onrender.com
