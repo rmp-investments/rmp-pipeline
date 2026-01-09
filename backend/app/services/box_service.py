@@ -7,12 +7,20 @@ Handles reading/writing files from Box cloud storage.
 import os
 import json
 import tempfile
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 import logging
 
-from boxsdk import JWTAuth, Client
-from boxsdk.exception import BoxAPIException
+# Lazy import for boxsdk to handle missing package gracefully
+try:
+    from boxsdk import JWTAuth, Client
+    from boxsdk.exception import BoxAPIException
+    BOXSDK_AVAILABLE = True
+except ImportError:
+    BOXSDK_AVAILABLE = False
+    JWTAuth = None
+    Client = None
+    BoxAPIException = Exception  # Fallback for type hints
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +39,10 @@ class BoxService:
 
     def _init_client(self):
         """Initialize the Box client using JWT auth."""
+        if not BOXSDK_AVAILABLE:
+            logger.warning("boxsdk package not available - Box integration disabled")
+            return
+
         try:
             # Check for JSON config in environment variable
             box_config = os.environ.get('BOX_CONFIG_JSON')
