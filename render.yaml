@@ -1,6 +1,4 @@
-# Render Blueprint for RMP Pipeline
 services:
-  # Backend API
   - type: web
     name: rmp-pipeline-api
     runtime: python
@@ -14,17 +12,9 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
-    healthCheckPath: /api/health
 
 staticSites:
-  # Frontend
   - name: rmp-pipeline-frontend
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/dist
-    envVars:
-      - key: VITE_API_URL
-        value: https://rmp-pipeline-api.onrender.com
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    publishDir: ./frontend/dist
+    pullRequestPreviewsEnabled: false
