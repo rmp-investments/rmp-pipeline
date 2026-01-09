@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-01-09T10:50:00Z",
+  "properties": {
+    "fieldstone": {
+      "id": "fieldstone",
+      "name": "Fieldstone Apartments",
+      "zone": "Zone2_Central",
+      "state": "KS",
+      "city": "Olathe",
+      "status": "active",
+      "created_at": "2025-12-12T00:00:00Z",
+      "last_processed": "2025-12-16T02:17:00Z",
+      "folder_path": "Properties/Zone2_Central/Fieldstone",
+      "config_path": "Properties/Zone2_Central/Fieldstone/config.json",
+      "units": 216,
+      "vintage": 2000,
+      "tags": ["production"]
+    },
+    "north_oak_crossing": {
+      "id": "north_oak_crossing",
+      "name": "North Oak Crossing Apartments",
+      "zone": "Zone2_Central",
+      "state": "MO",
+      "city": "Kansas City",
+      "status": "active",
+      "created_at": "2025-12-14T00:00:00Z",
+      "last_processed": "2025-12-15T22:28:00Z",
+      "folder_path": "Properties/Zone2_Central/NorthOakCrossing",
+      "config_path": "Properties/Zone2_Central/NorthOakCrossing/config.json",
+      "units": 184,
+      "vintage": 2003,
+      "tags": ["production"]
+    },
+    "varsity_townhomes": {
+      "id": "varsity_townhomes",
+      "name": "Varsity Townhomes",
+      "zone": "Zone1_Mountain",
+      "state": "CO",
+      "city": "Boulder",
+      "status": "active",
+      "created_at": "2025-12-12T00:00:00Z",
+      "last_processed": "2025-12-16T01:06:00Z",
+      "folder_path": "Properties/Zone1_Mountain/VarsityTownhomes",
+      "config_path": "Properties/Zone1_Mountain/VarsityTownhomes/config.json",
+      "units": null,
+      "vintage": null,
+      "tags": ["production"]
+    }
+  }
+}

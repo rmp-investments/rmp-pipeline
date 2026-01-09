@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "zones": {
+    "Zone1_Mountain": {
+      "id": 1,
+      "name": "Mountain",
+      "folder": "Zone1_Mountain",
+      "states": ["CO", "NM", "WY"],
+      "display": "Zone 1 (CO, NM, WY)"
+    },
+    "Zone2_Central": {
+      "id": 2,
+      "name": "Central",
+      "folder": "Zone2_Central",
+      "states": ["KS", "OK", "AR", "MO"],
+      "display": "Zone 2 (KS, OK, AR, MO)"
+    },
+    "Zone3_Texas": {
+      "id": 3,
+      "name": "Texas",
+      "folder": "Zone3_Texas",
+      "states": ["TX"],
+      "display": "Zone 3 (TX)"
+    },
+    "Zone4_Southeast": {
+      "id": 4,
+      "name": "Southeast",
+      "folder": "Zone4_Southeast",
+      "states": ["TN", "NC", "SC", "GA", "FL"],
+      "display": "Zone 4 (TN, NC, SC, GA, FL)"
+    },
+    "Zone5_Midwest": {
+      "id": 5,
+      "name": "Midwest",
+      "folder": "Zone5_Midwest",
+      "states": ["NE", "IA", "MN", "WI", "IL", "IN", "OH", "MI"],
+      "display": "Zone 5 (NE, IA, MN, WI, IL, IN, OH, MI)"
+    }
+  },
+  "state_to_zone": {
+    "CO": "Zone1_Mountain",
+    "NM": "Zone1_Mountain",
+    "WY": "Zone1_Mountain",
+    "KS": "Zone2_Central",
+    "OK": "Zone2_Central",
+    "AR": "Zone2_Central",
+    "MO": "Zone2_Central",
+    "TX": "Zone3_Texas",
+    "TN": "Zone4_Southeast",
+    "NC": "Zone4_Southeast",
+    "SC": "Zone4_Southeast",
+    "GA": "Zone4_Southeast",
+    "FL": "Zone4_Southeast",
+    "NE": "Zone5_Midwest",
+    "IA": "Zone5_Midwest",
+    "MN": "Zone5_Midwest",
+    "WI": "Zone5_Midwest",
+    "IL": "Zone5_Midwest",
+    "IN": "Zone5_Midwest",
+    "OH": "Zone5_Midwest",
+    "MI": "Zone5_Midwest"
+  }
+}

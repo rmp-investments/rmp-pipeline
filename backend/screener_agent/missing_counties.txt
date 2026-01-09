@@ -1,0 +1,5 @@
+# Missing Counties Log
+# Format: County, State | Lat, Lon | Date
+# Bring this file to Claude to research GIS endpoints
+#
+Johnson County, KS | 38.886463, -94.768785 | 2025-12-12

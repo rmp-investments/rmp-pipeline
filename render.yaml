@@ -1,0 +1,32 @@
+# Render Blueprint for RMP Pipeline
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API
+  - type: web
+    name: rmp-pipeline-api
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BOX_CONFIG_JSON
+        sync: false  # Set manually in Render dashboard
+      - key: DATABASE_URL
+        value: sqlite:///./rmp_pipeline.db
+      - key: SECRET_KEY
+        generateValue: true
+    healthCheckPath: /api/health
+
+  # Frontend (Static Site)
+  - type: web
+    name: rmp-pipeline-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://rmp-pipeline-api.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
