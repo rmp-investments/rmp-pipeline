@@ -17,7 +17,16 @@ try:
     from boxsdk import OAuth2, Client
     from boxsdk.exception import BoxAPIException
     BOXSDK_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    import sys
+    print(f"boxsdk import failed: {e}", file=sys.stderr)
+    BOXSDK_AVAILABLE = False
+    OAuth2 = None
+    Client = None
+    BoxAPIException = Exception
+except Exception as e:
+    import sys
+    print(f"boxsdk import error (non-ImportError): {e}", file=sys.stderr)
     BOXSDK_AVAILABLE = False
     OAuth2 = None
     Client = None

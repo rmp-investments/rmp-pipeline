@@ -12,8 +12,8 @@ aiosqlite>=0.19.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 
-# Box SDK for cloud file access
-boxsdk[jwt]>=3.9.0
+# Box SDK for cloud file access (pinned to 3.x series)
+boxsdk>=3.9.0,<10.0.0
 
 # Screener dependencies
 PyPDF2>=3.0.0
