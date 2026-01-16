@@ -2,17 +2,20 @@
 Authentication API endpoints.
 
 MVP implementation uses HTTP Basic Auth.
-TODO: Upgrade to JWT token-based auth for production.
+Includes Box OAuth2 integration for cloud file access.
 """
 
+import os
 from typing import Optional
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.config import settings
+from app.services.box_service import get_box_service, reinitialize_box_service
 
 
 router = APIRouter()
@@ -199,3 +202,96 @@ def require_auth(user: dict = Depends(get_current_user)) -> dict:
 # async def change_password(old_password: str, new_password: str, ...):
 #     """Change user password."""
 #     pass
+
+
+# ----- Box OAuth2 Endpoints -----
+
+
+@router.get("/box/login")
+async def box_oauth_login():
+    """
+    Initiate Box OAuth2 login flow.
+
+    Redirects user to Box authorization page.
+    """
+    redirect_uri = os.environ.get('BOX_REDIRECT_URI')
+    if not redirect_uri:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="BOX_REDIRECT_URI not configured"
+        )
+
+    box_service = get_box_service()
+    auth_url = box_service.get_authorization_url(redirect_uri)
+
+    if not auth_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate Box authorization URL"
+        )
+
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/box/callback")
+async def box_oauth_callback(code: str = Query(...), state: str = Query(None)):
+    """
+    Handle Box OAuth2 callback.
+
+    Exchanges authorization code for access tokens.
+    """
+    redirect_uri = os.environ.get('BOX_REDIRECT_URI')
+    if not redirect_uri:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="BOX_REDIRECT_URI not configured"
+        )
+
+    box_service = get_box_service()
+    success = box_service.authenticate_with_code(code, redirect_uri)
+
+    if success:
+        # Reinitialize the service with new tokens
+        reinitialize_box_service()
+
+        # Redirect to frontend or return success
+        frontend_url = os.environ.get('FRONTEND_URL', 'https://rmp-pipeline-frontend.onrender.com')
+        return RedirectResponse(url=f"{frontend_url}?box_auth=success")
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Box OAuth authentication failed"
+        )
+
+
+@router.get("/box/status")
+async def box_connection_status():
+    """
+    Check Box connection status.
+
+    Returns whether Box is connected and user info if available.
+    """
+    box_service = get_box_service()
+
+    if box_service.is_connected():
+        try:
+            user = box_service.client.user().get()
+            return {
+                "connected": True,
+                "user": {
+                    "name": user.name,
+                    "login": user.login,
+                    "id": user.id
+                }
+            }
+        except Exception as e:
+            return {
+                "connected": False,
+                "error": str(e),
+                "message": "Visit /api/auth/box/login to authorize"
+            }
+    else:
+        return {
+            "connected": False,
+            "message": "Visit /api/auth/box/login to authorize"
+        }
